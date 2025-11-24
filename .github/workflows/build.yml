@@ -67,9 +67,13 @@ jobs:
   create-release:
     needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
     
     steps:
+    - name: Get current date and time
+      id: date
+      run: echo "timestamp=$(date +'%Y-%m-%d-%H-%M')" >> $GITHUB_OUTPUT
+    
     - name: Download Windows artifact
       uses: actions/download-artifact@v4
       with:
@@ -85,8 +89,24 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: v${{ steps.date.outputs.timestamp }}
+        name: Release ${{ steps.date.outputs.timestamp }}
+        body: |
+          Automated build from commit ${{ github.sha }}
+          
+          ## Changes
+          - Built on ${{ steps.date.outputs.timestamp }}
+          
+          ## Downloads
+          - **Windows**: FastCut.exe
+          - **macOS**: FastCut
+          
+          ## Requirements
+          - FFmpeg must be installed and available in system PATH
         files: |
           ./windows/FastCut.exe
           ./macos/FastCut
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
