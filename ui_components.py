@@ -54,6 +54,12 @@ class RangeSlider(QSlider):
         elif abs(x - x_end) <= self.handle_radius + 2:
             self.dragging_handle = 'end'
         else:
+            # Click to seek: calculate position and emit signal
+            click_pos = (x - groove_rect.x()) / scale
+            click_pos = max(0, min(self.duration, click_pos))
+            self.setValue(int(click_pos))
+            self.sliderMoved.emit(int(click_pos))
+            # Also call parent to ensure proper event handling
             super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event):

@@ -40,6 +40,14 @@ QPushButton#exportBtn:hover {
     background-color: #406a9e;
 }
 
+/* Speed Adjustment Buttons */
+QPushButton#speedBtn {
+    min-width: 25px;
+    max-width: 25px;
+    padding: 2px;
+    font-weight: bold;
+}
+
 /* Sliders */
 QSlider::groove:horizontal {
     border: 1px solid #3d3d3d;

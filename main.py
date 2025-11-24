@@ -163,10 +163,24 @@ class FastCutApp(QMainWindow):
         self.update_play_button_icon(False)
         self.btn_play.clicked.connect(self.toggle_play)
         
+        # Speed controls
+        self.btn_speed_down = QPushButton("-")
+        self.btn_speed_down.setObjectName("speedBtn")
+        self.btn_speed_down.setFixedSize(25, 25)
+        self.btn_speed_down.clicked.connect(self.decrease_speed)
+        
         self.speed_combo = QComboBox()
+        self.speed_combo.setEditable(True)  # Allow custom speeds to be displayed
+        self.speed_combo.lineEdit().setReadOnly(True)  # But don't allow manual editing
+        self.speed_combo.setMinimumWidth(70)  # Ensure enough width for "0.00x" format
         self.speed_combo.addItems(["0.25x", "0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "1.75x", "2.0x", "2.5x", "3.0x"])
         self.speed_combo.setCurrentText(self.playback_speed)
         self.speed_combo.currentTextChanged.connect(self.change_speed)
+        
+        self.btn_speed_up = QPushButton("+")
+        self.btn_speed_up.setObjectName("speedBtn")
+        self.btn_speed_up.setFixedSize(25, 25)
+        self.btn_speed_up.clicked.connect(self.increase_speed)
         
         self.btn_export = QPushButton("Export Clip")
         self.btn_export.setObjectName("exportBtn")
@@ -175,7 +189,9 @@ class FastCutApp(QMainWindow):
         action_layout.addWidget(self.btn_open)
         action_layout.addStretch()
         action_layout.addWidget(self.btn_play)
+        action_layout.addWidget(self.btn_speed_down)
         action_layout.addWidget(self.speed_combo)
+        action_layout.addWidget(self.btn_speed_up)
         action_layout.addStretch()
         action_layout.addWidget(self.btn_export)
         
@@ -202,6 +218,8 @@ class FastCutApp(QMainWindow):
             self.set_start_mark()
         elif event.key() == Qt.Key.Key_V:
             self.set_end_mark()
+        elif event.key() == Qt.Key.Key_Space:
+            self.toggle_play()
         else:
             super().keyPressEvent(event)
 
@@ -292,6 +310,54 @@ class FastCutApp(QMainWindow):
         speed = float(text.replace("x", ""))
         self.video_player.media_player.setPlaybackRate(speed)
         self.playback_speed = text
+        self.save_config()
+
+    def decrease_speed(self):
+        """Decrease playback speed by 0.2x"""
+        current_speed = float(self.playback_speed.replace("x", ""))
+        new_speed = max(0.25, round(current_speed - 0.2, 2))  # Minimum 0.25x
+        new_speed_str = f"{new_speed:.2f}x"
+        
+        # Block signals to prevent triggering change_speed
+        self.speed_combo.blockSignals(True)
+        
+        # Find if this speed exists in the combo box
+        index = self.speed_combo.findText(new_speed_str)
+        if index >= 0:
+            self.speed_combo.setCurrentIndex(index)
+        else:
+            # For custom speeds, just update the current text
+            self.speed_combo.setCurrentText(new_speed_str)
+        
+        self.speed_combo.blockSignals(False)
+        
+        # Apply the speed change
+        self.playback_speed = new_speed_str
+        self.video_player.media_player.setPlaybackRate(new_speed)
+        self.save_config()
+
+    def increase_speed(self):
+        """Increase playback speed by 0.2x"""
+        current_speed = float(self.playback_speed.replace("x", ""))
+        new_speed = min(3.0, round(current_speed + 0.2, 2))  # Maximum 3.0x
+        new_speed_str = f"{new_speed:.2f}x"
+        
+        # Block signals to prevent triggering change_speed
+        self.speed_combo.blockSignals(True)
+        
+        # Find if this speed exists in the combo box
+        index = self.speed_combo.findText(new_speed_str)
+        if index >= 0:
+            self.speed_combo.setCurrentIndex(index)
+        else:
+            # For custom speeds, just update the current text
+            self.speed_combo.setCurrentText(new_speed_str)
+        
+        self.speed_combo.blockSignals(False)
+        
+        # Apply the speed change
+        self.playback_speed = new_speed_str
+        self.video_player.media_player.setPlaybackRate(new_speed)
         self.save_config()
 
     def set_start_mark(self):
@@ -409,14 +475,27 @@ class FastCutApp(QMainWindow):
              QMessageBox.warning(self, "Invalid Range", "End time must be greater than start time.")
              return
 
+        # Ensure video is paused before exporting
+        if self.video_player.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.video_player.media_player.pause()
+        
+        # Create progress dialog at the very beginning
+        progress = QMessageBox(self)
+        progress.setWindowTitle("Exporting")
+        progress.setText("Preparing export...")
+        progress.setStandardButtons(QMessageBox.StandardButton.NoButton)
+        progress.setModal(True)
+        progress.show()
+        QApplication.processEvents()
+
         real_start = start_sec
         real_end = end_sec
 
         # Only do keyframe alignment if enabled
         # Only align the START point to previous keyframe, keep END point exact
         if self.use_keyframe_cut:
-            self.statusBar().showMessage("Analyzing keyframes...")
-            QApplication.processEvents() # Keep UI responsive
+            progress.setText("Analyzing keyframes...")
+            QApplication.processEvents()
 
             keyframes = self.get_keyframes(self.current_file)
             
@@ -497,7 +576,9 @@ class FastCutApp(QMainWindow):
                 output_file
             ]
 
-        self.statusBar().showMessage("Exporting...")
+        progress.setText("Exporting clip, please wait...")
+        QApplication.processEvents()
+        
         try:
             # Run ffmpeg
             # Using creationflags to hide console window on Windows
@@ -506,14 +587,43 @@ class FastCutApp(QMainWindow):
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
-            subprocess.run(cmd, check=True, startupinfo=startupinfo)
+            result = subprocess.run(cmd, check=True, startupinfo=startupinfo, 
+                                   capture_output=True, text=True)
             
-            QMessageBox.information(self, "Success", f"Clip exported to:\n{output_file}")
+            # Close progress dialog
+            progress.close()
+            progress.deleteLater()
+            
+            # Create custom message box with "Open Folder" button
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Information)
+            msg_box.setWindowTitle("Success")
+            msg_box.setText(f"Clip exported to:\n{output_file}")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            
+            # Add "Open Folder" button
+            open_folder_btn = msg_box.addButton("Open Folder", QMessageBox.ButtonRole.ActionRole)
+            
+            msg_box.exec()
+            
+            # Check if "Open Folder" was clicked
+            if msg_box.clickedButton() == open_folder_btn:
+                # Open the folder containing the exported file
+                folder = os.path.dirname(output_file)
+                if os.name == 'nt':  # Windows
+                    os.startfile(folder)
+                elif os.name == 'posix':  # macOS/Linux
+                    subprocess.run(['open' if sys.platform == 'darwin' else 'xdg-open', folder])
+            
             self.statusBar().showMessage("Export Complete.")
         except subprocess.CalledProcessError as e:
+            progress.close()
+            progress.deleteLater()
             QMessageBox.critical(self, "Error", f"FFmpeg failed:\n{e}")
             self.statusBar().showMessage("Export Failed.")
         except Exception as e:
+            progress.close()
+            progress.deleteLater()
             QMessageBox.critical(self, "Error", f"An error occurred:\n{e}")
 
 if __name__ == "__main__":
