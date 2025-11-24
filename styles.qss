@@ -1,0 +1,96 @@
+/* Global Styles */
+QWidget {
+    background-color: #2b2b2b;
+    color: #ffffff;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #3c3f41;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 6px 12px;
+    min-width: 80px;
+}
+
+QPushButton:hover {
+    background-color: #4c5052;
+}
+
+QPushButton:pressed {
+    background-color: #2b2b2b;
+}
+
+QPushButton:disabled {
+    background-color: #2b2b2b;
+    color: #777;
+    border-color: #444;
+}
+
+/* Primary Button (Export) */
+QPushButton#exportBtn {
+    background-color: #365880;
+    border-color: #4a76a8;
+    font-weight: bold;
+}
+
+QPushButton#exportBtn:hover {
+    background-color: #406a9e;
+}
+
+/* Sliders */
+QSlider::groove:horizontal {
+    border: 1px solid #3d3d3d;
+    height: 8px;
+    background: #202020;
+    margin: 2px 0;
+    border-radius: 4px;
+}
+
+QSlider::handle:horizontal {
+    background: #cccccc;
+    border: 1px solid #5c5c5c;
+    width: 14px;
+    height: 14px;
+    margin: -4px 0;
+    border-radius: 7px;
+}
+
+QSlider::handle:horizontal:hover {
+    background: #ffffff;
+}
+
+QSlider::sub-page:horizontal {
+    background: #3a6ea5;
+    border-radius: 4px;
+}
+
+/* Labels */
+QLabel {
+    color: #bbbbbb;
+}
+
+QLabel#timeLabel {
+    font-family: 'Consolas', monospace;
+    font-weight: bold;
+    color: #eeeeee;
+}
+
+/* ComboBox */
+QComboBox {
+    background-color: #3c3f41;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 15px;
+    border-left-width: 1px;
+    border-left-color: #555;
+    border-left-style: solid;
+}
