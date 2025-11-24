@@ -11,6 +11,16 @@ from ui_components import VideoPlayerWidget, RangeSlider
 
 import json
 
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    
+    return os.path.join(base_path, relative_path)
+
 class FastCutApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -180,10 +190,11 @@ class FastCutApp(QMainWindow):
 
     def apply_styles(self):
         try:
-            with open("styles.qss", "r") as f:
+            styles_file = resource_path("styles.qss")
+            with open(styles_file, "r") as f:
                 self.setStyleSheet(f.read())
         except FileNotFoundError:
-            print("styles.qss not found")
+            print(f"styles.qss not found at {styles_file}")
 
     def keyPressEvent(self, event):
         # Handle keyboard shortcuts
