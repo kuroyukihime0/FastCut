@@ -25,6 +25,7 @@ class FastCutApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("FastCut - Simple Video Clipper")
+        self.setWindowIcon(QIcon(resource_path("assets/logo.png")))
         self.resize(1000, 700)
         self.setAcceptDrops(True)
 
