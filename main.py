@@ -1,6 +1,7 @@
 import sys
 import os
 import subprocess
+import shutil
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QFileDialog, QMessageBox, QComboBox, QStyle, QMenu)
 from PyQt6.QtCore import Qt, QTime, QTimer
@@ -23,23 +24,18 @@ def resource_path(relative_path):
 
 def get_executable_path(name):
     """Get path to bundled executable or fallback to system command"""
-    # Map generic name to platform specific name if needed
+    # Map generic name to platform specific name for BUNDLED binaries
+    bundled_filename = name
     if name == "ffmpeg":
         if sys.platform == "darwin":
-            filename = "ffmpeg_osx"
+            bundled_filename = "ffmpeg_osx"
         elif sys.platform == "win32":
-            filename = "ffmpeg.exe"
-        else:
-            filename = "ffmpeg"
+            bundled_filename = "ffmpeg.exe"
     elif name == "ffprobe":
         if sys.platform == "darwin":
-            filename = "ffprobe_osx" # Assuming user might add this later
+            bundled_filename = "ffprobe_osx"
         elif sys.platform == "win32":
-            filename = "ffprobe.exe"
-        else:
-            filename = "ffprobe"
-    else:
-        filename = name
+            bundled_filename = "ffprobe.exe"
 
     # Check bundled location (PyInstaller _MEIPASS or local bin folder)
     try:
@@ -47,23 +43,22 @@ def get_executable_path(name):
     except Exception:
         base_path = os.path.abspath(".")
     
-    # Look in root (if added directly) or bin folder
-    # When using --add-binary, PyInstaller puts them in the top level of _MEIPASS usually,
-    # or we can specify a destination folder.
-    # Let's assume we put them in a 'bin' folder inside the bundle to keep it clean,
-    # or just check both.
-    
     # Check 1: Inside 'bin' subdirectory (dev mode or if added to bin in bundle)
-    bundled_path = os.path.join(base_path, "bin", filename)
+    bundled_path = os.path.join(base_path, "bin", bundled_filename)
     if os.path.exists(bundled_path):
         return bundled_path
         
     # Check 2: Top level (common for PyInstaller onefile if added with '.')
-    bundled_path_root = os.path.join(base_path, filename)
+    bundled_path_root = os.path.join(base_path, bundled_filename)
     if os.path.exists(bundled_path_root):
         return bundled_path_root
 
-    # Fallback to system path (just return the name)
+    # Fallback to system path
+    # Use the original name (e.g. "ffmpeg") to search in PATH
+    system_path = shutil.which(name)
+    if system_path:
+        return system_path
+
     return name
 
 class FastCutApp(QMainWindow):
