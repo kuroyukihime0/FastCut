@@ -140,16 +140,21 @@ jobs:
           ${{ steps.changelog.outputs.changelog }}
           
           ## Downloads
+          
           ### Windows
-          - **Full (Bundled FFmpeg)**: FastCut-ffmpeg-embed-${{ steps.date.outputs.timestamp }}.exe
-          - **Lite (System FFmpeg)**: FastCut-${{ steps.date.outputs.timestamp }}.exe
+          - **Full Version (Recommended)**: `FastCut-ffmpeg-embed-${{ steps.date.outputs.timestamp }}.exe`
+            - *Includes FFmpeg. No setup required.*
+          - **Lite Version**: `FastCut-${{ steps.date.outputs.timestamp }}.exe`
+            - *Requires system FFmpeg.*
           
           ### macOS
-          - **Full (Bundled FFmpeg)**: FastCut-ffmpeg-embed-${{ steps.date.outputs.timestamp }}-osx
-          - **Lite (System FFmpeg)**: FastCut-${{ steps.date.outputs.timestamp }}-osx
+          - **Full Version (Recommended)**: `FastCut-ffmpeg-embed-${{ steps.date.outputs.timestamp }}-osx`
+            - *Includes FFmpeg. No setup required.*
+          - **Lite Version**: `FastCut-${{ steps.date.outputs.timestamp }}-osx`
+            - *Requires system FFmpeg.*
           
-          ## Requirements
-          - **Lite Version**: FFmpeg must be installed and available in system PATH
+          ## Notes
+          - If you use the **Lite Version**, ensure FFmpeg is installed and in your system PATH.
         files: |
           ./windows/FastCut-ffmpeg-embed-${{ steps.date.outputs.timestamp }}.exe
           ./windows/FastCut-${{ steps.date.outputs.timestamp }}.exe
