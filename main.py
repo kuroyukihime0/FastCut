@@ -166,7 +166,7 @@ class FastCutApp(QMainWindow):
         # Speed controls
         self.btn_speed_down = QPushButton("-")
         self.btn_speed_down.setObjectName("speedBtn")
-        self.btn_speed_down.setFixedSize(25, 25)
+        # self.btn_speed_down.setFixedSize(25, 25)
         self.btn_speed_down.clicked.connect(self.decrease_speed)
         
         self.speed_combo = QComboBox()
@@ -179,7 +179,7 @@ class FastCutApp(QMainWindow):
         
         self.btn_speed_up = QPushButton("+")
         self.btn_speed_up.setObjectName("speedBtn")
-        self.btn_speed_up.setFixedSize(25, 25)
+        # self.btn_speed_up.setFixedSize(25, 25)
         self.btn_speed_up.clicked.connect(self.increase_speed)
         
         self.btn_export = QPushButton("Export Clip")
