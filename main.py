@@ -21,6 +21,51 @@ def resource_path(relative_path):
     
     return os.path.join(base_path, relative_path)
 
+def get_executable_path(name):
+    """Get path to bundled executable or fallback to system command"""
+    # Map generic name to platform specific name if needed
+    if name == "ffmpeg":
+        if sys.platform == "darwin":
+            filename = "ffmpeg_osx"
+        elif sys.platform == "win32":
+            filename = "ffmpeg.exe"
+        else:
+            filename = "ffmpeg"
+    elif name == "ffprobe":
+        if sys.platform == "darwin":
+            filename = "ffprobe_osx" # Assuming user might add this later
+        elif sys.platform == "win32":
+            filename = "ffprobe.exe"
+        else:
+            filename = "ffprobe"
+    else:
+        filename = name
+
+    # Check bundled location (PyInstaller _MEIPASS or local bin folder)
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    
+    # Look in root (if added directly) or bin folder
+    # When using --add-binary, PyInstaller puts them in the top level of _MEIPASS usually,
+    # or we can specify a destination folder.
+    # Let's assume we put them in a 'bin' folder inside the bundle to keep it clean,
+    # or just check both.
+    
+    # Check 1: Inside 'bin' subdirectory (dev mode or if added to bin in bundle)
+    bundled_path = os.path.join(base_path, "bin", filename)
+    if os.path.exists(bundled_path):
+        return bundled_path
+        
+    # Check 2: Top level (common for PyInstaller onefile if added with '.')
+    bundled_path_root = os.path.join(base_path, filename)
+    if os.path.exists(bundled_path_root):
+        return bundled_path_root
+
+    # Fallback to system path (just return the name)
+    return name
+
 class FastCutApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -159,6 +204,11 @@ class FastCutApp(QMainWindow):
         self.action_keyframe_cut.setChecked(self.use_keyframe_cut)
         self.action_keyframe_cut.triggered.connect(self.toggle_keyframe_cut)
         settings_menu.addAction(self.action_keyframe_cut)
+
+        help_menu = menubar.addMenu("Help")
+        action_about = QAction("About", self)
+        action_about.triggered.connect(self.show_about_dialog)
+        help_menu.addAction(action_about)
 
         # Playback Controls
         action_layout = QHBoxLayout()
@@ -452,8 +502,9 @@ class FastCutApp(QMainWindow):
 
     def get_keyframes(self, file_path, start_time=None, end_time=None):
         try:
+            ffprobe_cmd = get_executable_path("ffprobe")
             cmd = [
-                "ffprobe", 
+                ffprobe_cmd, 
                 "-v", "error", 
                 "-select_streams", "v:0", 
                 "-skip_frame", "nokey", 
@@ -568,9 +619,10 @@ class FastCutApp(QMainWindow):
         # - Use -async 1 to force audio sync to video timestamps
         # - Use -shortest to ensure audio and video end at the same time
         # - This prevents static frames at the beginning and video-only frames at the end
+        ffmpeg_cmd = get_executable_path("ffmpeg")
         if self.use_keyframe_cut:
             cmd = [
-                "ffmpeg", "-y",
+                ffmpeg_cmd, "-y",
                 "-i", self.current_file,
                 "-ss", str(real_start),
                 "-t", str(duration_sec),
@@ -586,7 +638,7 @@ class FastCutApp(QMainWindow):
             # For non-keyframe cutting, use -ss before -i for speed
             # Also use -async, -shortest and explicit mapping to prevent audio/video desync
             cmd = [
-                "ffmpeg", "-y",
+                ffmpeg_cmd, "-y",
                 "-ss", str(real_start),
                 "-i", self.current_file,
                 "-t", str(duration_sec),
@@ -647,6 +699,52 @@ class FastCutApp(QMainWindow):
             progress.close()
             progress.deleteLater()
             QMessageBox.critical(self, "Error", f"An error occurred:\n{e}")
+
+    def get_ffmpeg_version(self):
+        try:
+            ffmpeg_cmd = get_executable_path("ffmpeg")
+            # Hide console on Windows
+            startupinfo = None
+            if os.name == 'nt':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            
+            result = subprocess.run([ffmpeg_cmd, "-version"], capture_output=True, text=True, startupinfo=startupinfo, check=True)
+            # First line usually contains version info
+            return result.stdout.splitlines()[0]
+        except Exception as e:
+            return f"Error detecting FFmpeg: {e}"
+
+    def get_ffprobe_version(self):
+        try:
+            ffprobe_cmd = get_executable_path("ffprobe")
+            # Hide console on Windows
+            startupinfo = None
+            if os.name == 'nt':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            
+            result = subprocess.run([ffprobe_cmd, "-version"], capture_output=True, text=True, startupinfo=startupinfo, check=True)
+            # First line usually contains version info
+            return result.stdout.splitlines()[0]
+        except Exception as e:
+            return f"Error detecting FFprobe: {e}"
+
+    def show_about_dialog(self):
+        version = "1.0.0"
+        ffmpeg_version = self.get_ffmpeg_version()
+        ffmpeg_path = get_executable_path("ffmpeg")
+        ffprobe_version = self.get_ffprobe_version()
+        ffprobe_path = get_executable_path("ffprobe")
+        
+        QMessageBox.about(self, "About FastCut",
+            f"FastCut v{version}\n\n"
+            f"A simple video clipping tool.\n\n"
+            f"FFmpeg Path: {ffmpeg_path}\n"
+            f"FFmpeg Version: {ffmpeg_version}\n\n"
+            f"FFprobe Path: {ffprobe_path}\n"
+            f"FFprobe Version: {ffprobe_version}"
+        )
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
