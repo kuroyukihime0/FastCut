@@ -1,5 +1,7 @@
 # FastCut
 
+[![中文文档](https://img.shields.io/badge/文档-中文版-blue.svg)](README_zh.md)
+
 <p align="center">
   <img src="assets/logo.png" alt="FastCut Logo" width="128"/>
 </p>
