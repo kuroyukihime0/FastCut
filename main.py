@@ -119,8 +119,10 @@ class FastCutApp(QMainWindow):
         
         # Range Buttons
         self.btn_set_start = QPushButton("Set Start [C]")
+        self.btn_set_start.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btn_set_start.clicked.connect(self.set_start_mark)
         self.btn_set_end = QPushButton("Set End [V]")
+        self.btn_set_end.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btn_set_end.clicked.connect(self.set_end_mark)
         
         time_layout.addWidget(self.btn_set_start)
@@ -128,6 +130,7 @@ class FastCutApp(QMainWindow):
         
         # Preview Button
         self.btn_preview = QPushButton("Preview")
+        self.btn_preview.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btn_preview.clicked.connect(self.preview_range)
         time_layout.addWidget(self.btn_preview)
         
@@ -160,15 +163,18 @@ class FastCutApp(QMainWindow):
         action_layout = QHBoxLayout()
         
         self.btn_open = QPushButton("Open File")
+        self.btn_open.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btn_open.clicked.connect(self.open_file_dialog)
         
         self.btn_play = QPushButton()
+        self.btn_play.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.update_play_button_icon(False)
         self.btn_play.clicked.connect(self.toggle_play)
         
         # Speed controls
         self.btn_speed_down = QPushButton("-")
         self.btn_speed_down.setObjectName("speedBtn")
+        self.btn_speed_down.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         # self.btn_speed_down.setFixedSize(25, 25)
         self.btn_speed_down.clicked.connect(self.decrease_speed)
         
@@ -182,11 +188,13 @@ class FastCutApp(QMainWindow):
         
         self.btn_speed_up = QPushButton("+")
         self.btn_speed_up.setObjectName("speedBtn")
+        self.btn_speed_up.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         # self.btn_speed_up.setFixedSize(25, 25)
         self.btn_speed_up.clicked.connect(self.increase_speed)
         
         self.btn_export = QPushButton("Export Clip")
         self.btn_export.setObjectName("exportBtn")
+        self.btn_export.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btn_export.clicked.connect(self.export_clip)
 
         action_layout.addWidget(self.btn_open)
