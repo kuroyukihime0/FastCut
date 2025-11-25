@@ -73,6 +73,25 @@ jobs:
     if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
     
     steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Generate Changelog
+      id: changelog
+      shell: bash
+      run: |
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        if [ -z "$LATEST_TAG" ]; then
+          CHANGELOG=$(git log --pretty=format:"- %s")
+        else
+          CHANGELOG=$(git log "$LATEST_TAG"..HEAD --pretty=format:"- %s")
+        fi
+        EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+        echo "changelog<<$EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "$EOF" >> $GITHUB_OUTPUT
+
     - name: Get current date and time
       id: date
       run: echo "timestamp=$(date +'%Y-%m-%d-%H-%M')" >> $GITHUB_OUTPUT
@@ -98,7 +117,7 @@ jobs:
           Automated build from commit ${{ github.sha }}
           
           ## Changes
-          - Built on ${{ steps.date.outputs.timestamp }}
+          ${{ steps.changelog.outputs.changelog }}
           
           ## Downloads
           - **Windows**: FastCut.exe
