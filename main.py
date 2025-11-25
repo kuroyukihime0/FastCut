@@ -450,7 +450,7 @@ class FastCutApp(QMainWindow):
         status = "enabled" if self.use_keyframe_cut else "disabled"
         self.statusBar().showMessage(f"Smart Cut (Keyframe Aligned): {status}")
 
-    def get_keyframes(self, file_path):
+    def get_keyframes(self, file_path, start_time=None, end_time=None):
         try:
             cmd = [
                 "ffprobe", 
@@ -458,9 +458,13 @@ class FastCutApp(QMainWindow):
                 "-select_streams", "v:0", 
                 "-skip_frame", "nokey", 
                 "-show_entries", "frame=pkt_pts_time", 
-                "-of", "csv=p=0", 
-                file_path
+                "-of", "csv=p=0"
             ]
+
+            if start_time is not None and end_time is not None:
+                cmd.extend(["-read_intervals", f"{start_time}%{end_time}"])
+
+            cmd.append(file_path)
             
             # Hide console on Windows
             startupinfo = None
@@ -509,7 +513,13 @@ class FastCutApp(QMainWindow):
             progress.setText("Analyzing keyframes...")
             QApplication.processEvents()
 
-            keyframes = self.get_keyframes(self.current_file)
+            # Optimize: Only scan 5 seconds before start point + 5 seconds after
+            # User requested 5s, though larger GOPs might be missed if > 5s.
+            lookback = 5.0
+            search_start = max(0.0, start_sec - lookback)
+            search_end = start_sec + 5.0
+            
+            keyframes = self.get_keyframes(self.current_file, search_start, search_end)
             
             if keyframes:
                 # Find keyframe before or at start_sec
