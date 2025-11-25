@@ -30,15 +30,21 @@ jobs:
         pip install PyQt6
         pip install pyinstaller
     
-    - name: Build with PyInstaller
+    - name: Build Lite (No FFmpeg)
       run: |
-        pyinstaller --name=FastCut --windowed --onefile --icon=assets/logo.ico --add-data "styles.qss;." --add-data "assets;assets" --add-binary "bin/ffmpeg.exe;bin" --add-binary "bin/ffprobe.exe;bin" main.py
+        pyinstaller --name=FastCut-Lite --windowed --onefile --icon=assets/logo.ico --add-data "styles.qss;." --add-data "assets;assets" main.py
+
+    - name: Build Full (With FFmpeg)
+      run: |
+        pyinstaller --name=FastCut-Full --windowed --onefile --icon=assets/logo.ico --add-data "styles.qss;." --add-data "assets;assets" --add-binary "bin/ffmpeg.exe;bin" --add-binary "bin/ffprobe.exe;bin" main.py
     
-    - name: Upload Windows artifact
+    - name: Upload Windows artifacts
       uses: actions/upload-artifact@v4
       with:
         name: FastCut-Windows
-        path: dist/FastCut.exe
+        path: |
+          dist/FastCut-Lite.exe
+          dist/FastCut-Full.exe
 
   build-macos:
     runs-on: macos-latest
@@ -57,15 +63,21 @@ jobs:
         pip install PyQt6
         pip install pyinstaller
     
-    - name: Build with PyInstaller
+    - name: Build Lite (No FFmpeg)
       run: |
-        pyinstaller --name=FastCut --windowed --onefile --add-data "styles.qss:." --add-data "assets:assets" --add-binary "bin/ffmpeg_osx:bin" --add-binary "bin/ffprobe_osx:bin" main.py
+        pyinstaller --name=FastCut-Lite --windowed --onefile --add-data "styles.qss:." --add-data "assets:assets" main.py
+
+    - name: Build Full (With FFmpeg)
+      run: |
+        pyinstaller --name=FastCut-Full --windowed --onefile --add-data "styles.qss:." --add-data "assets:assets" --add-binary "bin/ffmpeg_osx:bin" --add-binary "bin/ffprobe_osx:bin" main.py
     
-    - name: Upload macOS artifact
+    - name: Upload macOS artifacts
       uses: actions/upload-artifact@v4
       with:
         name: FastCut-macOS
-        path: dist/FastCut
+        path: |
+          dist/FastCut-Lite
+          dist/FastCut-Full
 
   create-release:
     needs: [build-windows, build-macos]
@@ -107,6 +119,14 @@ jobs:
       with:
         name: FastCut-macOS
         path: ./macos
+
+    - name: Rename Artifacts
+      run: |
+        TIMESTAMP="${{ steps.date.outputs.timestamp }}"
+        mv ./windows/FastCut-Lite.exe "./windows/FastCut-${TIMESTAMP}.exe"
+        mv ./windows/FastCut-Full.exe "./windows/FastCut-ffmpeg-embed-${TIMESTAMP}.exe"
+        mv ./macos/FastCut-Lite "./macos/FastCut-${TIMESTAMP}-osx"
+        mv ./macos/FastCut-Full "./macos/FastCut-ffmpeg-embed-${TIMESTAMP}-osx"
     
     - name: Create Release
       uses: softprops/action-gh-release@v1
@@ -120,14 +140,21 @@ jobs:
           ${{ steps.changelog.outputs.changelog }}
           
           ## Downloads
-          - **Windows**: FastCut.exe
-          - **macOS**: FastCut
+          ### Windows
+          - **Full (Bundled FFmpeg)**: FastCut-ffmpeg-embed-${{ steps.date.outputs.timestamp }}.exe
+          - **Lite (System FFmpeg)**: FastCut-${{ steps.date.outputs.timestamp }}.exe
+          
+          ### macOS
+          - **Full (Bundled FFmpeg)**: FastCut-ffmpeg-embed-${{ steps.date.outputs.timestamp }}-osx
+          - **Lite (System FFmpeg)**: FastCut-${{ steps.date.outputs.timestamp }}-osx
           
           ## Requirements
-          - FFmpeg must be installed and available in system PATH
+          - **Lite Version**: FFmpeg must be installed and available in system PATH
         files: |
-          ./windows/FastCut.exe
-          ./macos/FastCut
+          ./windows/FastCut-ffmpeg-embed-${{ steps.date.outputs.timestamp }}.exe
+          ./windows/FastCut-${{ steps.date.outputs.timestamp }}.exe
+          ./macos/FastCut-ffmpeg-embed-${{ steps.date.outputs.timestamp }}-osx
+          ./macos/FastCut-${{ steps.date.outputs.timestamp }}-osx
         draft: false
         prerelease: false
       env:
