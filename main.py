@@ -34,7 +34,10 @@ class FastCutApp(QMainWindow):
         self.start_time = 0
         self.end_time = 0
         self.is_playing = False
-        self.config_file = "config.json"
+        # Determine a persistent configuration directory (e.g., %APPDATA%/FastCut)
+        self.config_dir = os.path.join(os.getenv('APPDATA', ''), 'FastCut')
+        os.makedirs(self.config_dir, exist_ok=True)
+        self.config_file = os.path.join(self.config_dir, 'config.json')
         self.export_dir = ""
         self.playback_speed = "1.0x"
         self.use_keyframe_cut = True  # Default to enabled
