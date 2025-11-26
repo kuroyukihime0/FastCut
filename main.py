@@ -3,8 +3,8 @@ import os
 import subprocess
 import shutil
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QPushButton, QLabel, QFileDialog, QMessageBox, QComboBox, QStyle, QMenu)
-from PyQt6.QtCore import Qt, QTime, QTimer
+                             QPushButton, QLabel, QFileDialog, QMessageBox, QComboBox, QStyle, QMenu, QProgressDialog)
+from PyQt6.QtCore import Qt, QTime, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QIcon, QAction, QDragEnterEvent, QDropEvent
 from PyQt6.QtMultimedia import QMediaPlayer
 
@@ -60,6 +60,69 @@ def get_executable_path(name):
         return system_path
 
     return name
+
+class KeyframeThread(QThread):
+    keyframes_loaded = pyqtSignal(list)
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, file_path, start_time=None, end_time=None):
+        super().__init__()
+        self.file_path = file_path
+        self.start_time = start_time
+        self.end_time = end_time
+
+    def run(self):
+        try:
+            ffprobe_cmd = get_executable_path("ffprobe")
+            cmd = [
+                ffprobe_cmd, 
+                "-v", "error", 
+                "-select_streams", "v:0", 
+                "-skip_frame", "nokey", 
+                "-show_entries", "frame=pkt_pts_time", 
+                "-of", "csv=p=0"
+            ]
+
+            if self.start_time is not None and self.end_time is not None:
+                cmd.extend(["-read_intervals", f"{self.start_time}%{self.end_time}"])
+
+            cmd.append(self.file_path)
+            
+            # Hide console on Windows
+            startupinfo = None
+            if os.name == 'nt':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+            result = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo, check=True)
+            timestamps = [float(line.strip()) for line in result.stdout.splitlines() if line.strip()]
+            self.keyframes_loaded.emit(sorted(timestamps))
+        except Exception as e:
+            self.error_occurred.emit(str(e))
+
+class ExportThread(QThread):
+    export_finished = pyqtSignal(str)
+    export_error = pyqtSignal(str)
+
+    def __init__(self, cmd):
+        super().__init__()
+        self.cmd = cmd
+
+    def run(self):
+        try:
+            # Hide console on Windows
+            startupinfo = None
+            if os.name == 'nt':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+            subprocess.run(self.cmd, check=True, startupinfo=startupinfo, capture_output=True, text=True)
+            self.export_finished.emit("Export Complete")
+        except subprocess.CalledProcessError as e:
+            self.export_error.emit(f"FFmpeg failed:\n{e.stderr if e.stderr else str(e)}")
+        except Exception as e:
+            self.export_error.emit(f"An error occurred:\n{str(e)}")
+
 
 class FastCutApp(QMainWindow):
     def __init__(self):
@@ -495,45 +558,38 @@ class FastCutApp(QMainWindow):
         status = "enabled" if self.use_keyframe_cut else "disabled"
         self.statusBar().showMessage(f"Smart Cut (Keyframe Aligned): {status}")
 
-    def get_keyframes(self, file_path, start_time=None, end_time=None):
-        try:
-            ffprobe_cmd = get_executable_path("ffprobe")
-            cmd = [
-                ffprobe_cmd, 
-                "-v", "error", 
-                "-select_streams", "v:0", 
-                "-skip_frame", "nokey", 
-                "-show_entries", "frame=pkt_pts_time", 
-                "-of", "csv=p=0"
-            ]
+    def start_keyframe_analysis(self, file_path, start_time, end_time):
+        self.progress_dialog = QProgressDialog("Analyzing keyframes...", "Cancel", 0, 0, self)
+        self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        self.progress_dialog.setMinimumDuration(0)
+        self.progress_dialog.show()
 
-            if start_time is not None and end_time is not None:
-                cmd.extend(["-read_intervals", f"{start_time}%{end_time}"])
+        self.keyframe_thread = KeyframeThread(file_path, start_time, end_time)
+        self.keyframe_thread.keyframes_loaded.connect(self.on_keyframes_loaded)
+        self.keyframe_thread.error_occurred.connect(self.on_keyframe_error)
+        self.keyframe_thread.finished.connect(self.progress_dialog.close)
+        self.keyframe_thread.start()
 
-            cmd.append(file_path)
-            
-            # Hide console on Windows
-            startupinfo = None
-            if os.name == 'nt':
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    def on_keyframes_loaded(self, keyframes):
+        # Continue export process with loaded keyframes
+        self.continue_export_with_keyframes(keyframes)
 
-            result = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo, check=True)
-            timestamps = [float(line.strip()) for line in result.stdout.splitlines() if line.strip()]
-            return sorted(timestamps)
-        except Exception as e:
-            print(f"Error getting keyframes: {e}")
-            return []
+    def on_keyframe_error(self, error_msg):
+        print(f"Error getting keyframes: {error_msg}")
+        # Fallback to no keyframes or show error? 
+        # For now, let's just proceed without keyframe alignment if it fails, or maybe just warn.
+        # But to be safe, let's proceed with empty keyframes so export continues.
+        self.continue_export_with_keyframes([])
 
     def export_clip(self):
         if not self.current_file:
             QMessageBox.warning(self, "No File", "Please load a video file first.")
             return
 
-        start_sec = self.start_time / 1000.0
-        end_sec = self.end_time / 1000.0
+        self.export_start_sec = self.start_time / 1000.0
+        self.export_end_sec = self.end_time / 1000.0
         
-        if end_sec <= start_sec:
+        if self.export_end_sec <= self.export_start_sec:
              QMessageBox.warning(self, "Invalid Range", "End time must be greater than start time.")
              return
 
@@ -541,46 +597,33 @@ class FastCutApp(QMainWindow):
         if self.video_player.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.video_player.media_player.pause()
         
-        # Create progress dialog at the very beginning
-        progress = QMessageBox(self)
-        progress.setWindowTitle("Exporting")
-        progress.setText("Preparing export...")
-        progress.setStandardButtons(QMessageBox.StandardButton.NoButton)
-        progress.setModal(True)
-        progress.show()
-        QApplication.processEvents()
-
-        real_start = start_sec
-        real_end = end_sec
-
         # Only do keyframe alignment if enabled
-        # Only align the START point to previous keyframe, keep END point exact
         if self.use_keyframe_cut:
-            progress.setText("Analyzing keyframes...")
-            QApplication.processEvents()
-
             # Optimize: Only scan 5 seconds before start point + 5 seconds after
-            # User requested 5s, though larger GOPs might be missed if > 5s.
             lookback = 5.0
-            search_start = max(0.0, start_sec - lookback)
-            search_end = start_sec + 5.0
+            search_start = max(0.0, self.export_start_sec - lookback)
+            search_end = self.export_start_sec + 5.0
             
-            keyframes = self.get_keyframes(self.current_file, search_start, search_end)
-            
-            if keyframes:
-                # Find keyframe before or at start_sec
-                prev_kf = 0.0
-                for kf in keyframes:
-                    if kf <= start_sec:
-                        prev_kf = kf
-                    else:
-                        break
-                real_start = prev_kf
+            self.start_keyframe_analysis(self.current_file, search_start, search_end)
+        else:
+            self.continue_export_with_keyframes([])
 
-                # Keep end point exact (don't snap to next keyframe)
-                real_end = end_sec
-                
-                print(f"Adjusted start: {start_sec} -> {real_start}, end unchanged: {end_sec}")
+    def continue_export_with_keyframes(self, keyframes):
+        real_start = self.export_start_sec
+        real_end = self.export_end_sec
+
+        if self.use_keyframe_cut and keyframes:
+            # Find keyframe before or at start_sec
+            prev_kf = 0.0
+            for kf in keyframes:
+                if kf <= self.export_start_sec:
+                    prev_kf = kf
+                else:
+                    break
+            real_start = prev_kf
+            # Keep end point exact
+            real_end = self.export_end_sec
+            print(f"Adjusted start: {self.export_start_sec} -> {real_start}, end unchanged: {self.export_end_sec}")
 
         duration_sec = real_end - real_start
 
@@ -596,24 +639,12 @@ class FastCutApp(QMainWindow):
             milliseconds = ms % 1000
             return f"{hours:02}.{minutes:02}.{seconds:02}.{milliseconds:03}"
 
-        # Use the ACTUAL cut times for the filename, or the SELECTED times?
-        # User asked for "Selected time timestamp" previously.
-        # But now they asked for "Cut from prev keyframe...".
-        # Usually, showing the actual cut range is more honest.
-        # Let's use the ACTUAL cut times (real_start, real_end) converted to ms.
         start_str = format_timestamp_for_filename(int(real_start * 1000))
         end_str = format_timestamp_for_filename(int(real_end * 1000))
         
         output_file = os.path.join(folder, f"{name}-{start_str}-{end_str}{ext}")
+        self.current_output_file = output_file # Store for "Open Folder"
 
-        # FFmpeg command for keyframe-aligned cutting
-        # When using keyframe alignment with -c copy:
-        # - Put -ss AFTER -i for accurate cutting (slower but more accurate)
-        # - Use -avoid_negative_ts make_zero to fix timestamp issues
-        # - Map both video and audio streams explicitly
-        # - Use -async 1 to force audio sync to video timestamps
-        # - Use -shortest to ensure audio and video end at the same time
-        # - This prevents static frames at the beginning and video-only frames at the end
         ffmpeg_cmd = get_executable_path("ffmpeg")
         if self.use_keyframe_cut:
             cmd = [
@@ -621,8 +652,8 @@ class FastCutApp(QMainWindow):
                 "-i", self.current_file,
                 "-ss", str(real_start),
                 "-t", str(duration_sec),
-                "-map", "0:v:0",  # Map first video stream
-                "-map", "0:a:0",  # Map first audio stream
+                "-map", "0:v:0",
+                "-map", "0:a:0",
                 "-c", "copy",
                 "-avoid_negative_ts", "make_zero",
                 "-async", "1",
@@ -630,70 +661,55 @@ class FastCutApp(QMainWindow):
                 output_file
             ]
         else:
-            # For non-keyframe cutting, use -ss before -i for speed
-            # Also use -async, -shortest and explicit mapping to prevent audio/video desync
             cmd = [
                 ffmpeg_cmd, "-y",
                 "-ss", str(real_start),
                 "-i", self.current_file,
                 "-t", str(duration_sec),
-                "-map", "0:v:0",  # Map first video stream
-                "-map", "0:a:0",  # Map first audio stream
+                "-map", "0:v:0",
+                "-map", "0:a:0",
                 "-c", "copy",
                 "-async", "1",
                 "-shortest",
                 output_file
             ]
 
-        progress.setText("Exporting clip, please wait...")
-        QApplication.processEvents()
-        
-        try:
-            # Run ffmpeg
-            # Using creationflags to hide console window on Windows
-            startupinfo = None
-            if os.name == 'nt':
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        self.progress_dialog = QProgressDialog("Exporting clip, please wait...", "Cancel", 0, 0, self)
+        self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        self.progress_dialog.setMinimumDuration(0)
+        self.progress_dialog.show()
 
-            result = subprocess.run(cmd, check=True, startupinfo=startupinfo, 
-                                   capture_output=True, text=True)
-            
-            # Close progress dialog
-            progress.close()
-            progress.deleteLater()
-            
-            # Create custom message box with "Open Folder" button
-            msg_box = QMessageBox(self)
-            msg_box.setIcon(QMessageBox.Icon.Information)
-            msg_box.setWindowTitle("Success")
-            msg_box.setText(f"Clip exported to:\n{output_file}")
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
-            
-            # Add "Open Folder" button
-            open_folder_btn = msg_box.addButton("Open Folder", QMessageBox.ButtonRole.ActionRole)
-            
-            msg_box.exec()
-            
-            # Check if "Open Folder" was clicked
-            if msg_box.clickedButton() == open_folder_btn:
-                # Open the folder containing the exported file
-                folder = os.path.dirname(output_file)
-                if os.name == 'nt':  # Windows
-                    os.startfile(folder)
-                elif os.name == 'posix':  # macOS/Linux
-                    subprocess.run(['open' if sys.platform == 'darwin' else 'xdg-open', folder])
-            
-            self.statusBar().showMessage("Export Complete.")
-        except subprocess.CalledProcessError as e:
-            progress.close()
-            progress.deleteLater()
-            QMessageBox.critical(self, "Error", f"FFmpeg failed:\n{e}")
-            self.statusBar().showMessage("Export Failed.")
-        except Exception as e:
-            progress.close()
-            progress.deleteLater()
-            QMessageBox.critical(self, "Error", f"An error occurred:\n{e}")
+        self.export_thread = ExportThread(cmd)
+        self.export_thread.export_finished.connect(self.on_export_finished)
+        self.export_thread.export_error.connect(self.on_export_error)
+        # self.export_thread.finished.connect(self.progress_dialog.close) # Close manually in handlers to ensure dialog stays if error
+        self.export_thread.start()
+
+    def on_export_finished(self, message):
+        self.progress_dialog.close()
+        
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setWindowTitle("Success")
+        msg_box.setText(f"Clip exported to:\n{self.current_output_file}")
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        
+        open_folder_btn = msg_box.addButton("Open Folder", QMessageBox.ButtonRole.ActionRole)
+        msg_box.exec()
+        
+        if msg_box.clickedButton() == open_folder_btn:
+            folder = os.path.dirname(self.current_output_file)
+            if os.name == 'nt':
+                os.startfile(folder)
+            elif os.name == 'posix':
+                subprocess.run(['open' if sys.platform == 'darwin' else 'xdg-open', folder])
+        
+        self.statusBar().showMessage("Export Complete.")
+
+    def on_export_error(self, error_msg):
+        self.progress_dialog.close()
+        QMessageBox.critical(self, "Error", error_msg)
+        self.statusBar().showMessage("Export Failed.")
 
     def get_ffmpeg_version(self):
         try:
