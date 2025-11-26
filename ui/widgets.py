@@ -1,9 +1,7 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                             QSlider, QLabel, QStyle, QSizePolicy, QFileDialog, QStyleOptionSlider, QToolTip)
-from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTime, QEvent
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-from PyQt6.QtMultimediaWidgets import QVideoWidget
-from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QDragEnterEvent, QDropEvent
+from PyQt6.QtWidgets import (QWidget, QSlider, QStyle, QStyleOptionSlider, QToolTip)
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QPainter, QColor, QBrush, QPen
+from core.utils import format_timestamp
 
 class RangeSlider(QSlider):
     rangeChanged = pyqtSignal(int, int) # start, end
@@ -88,11 +86,7 @@ class RangeSlider(QSlider):
                 self.update()
                 
                 # Show tooltip for handle
-                seconds = (new_pos // 1000) % 60
-                minutes = (new_pos // 60000) % 60
-                hours = (new_pos // 3600000)
-                milliseconds = new_pos % 1000
-                time_str = f"{hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}"
+                time_str = format_timestamp(int(new_pos))
                 QToolTip.showText(event.globalPosition().toPoint(), time_str, self)
                 return
 
@@ -101,11 +95,7 @@ class RangeSlider(QSlider):
             val = QStyle.sliderValueFromPosition(self.minimum(), self.maximum(), event.pos().x(), self.width())
             
             # Format time
-            seconds = (val // 1000) % 60
-            minutes = (val // 60000) % 60
-            hours = (val // 3600000)
-            milliseconds = val % 1000
-            time_str = f"{hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}"
+            time_str = format_timestamp(val)
             
             QToolTip.showText(event.globalPosition().toPoint(), time_str, self)
 
@@ -165,15 +155,8 @@ class RangeSlider(QSlider):
         font.setPointSize(8)
         painter.setFont(font)
 
-        def format_ms(ms):
-            seconds = (ms // 1000) % 60
-            minutes = (ms // 60000) % 60
-            hours = (ms // 3600000)
-            milliseconds = ms % 1000
-            return f"{hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}"
-
-        start_str = format_ms(int(self.start_pos))
-        end_str = format_ms(int(self.end_pos))
+        start_str = format_timestamp(int(self.start_pos))
+        end_str = format_timestamp(int(self.end_pos))
 
         # Adjust text position
         text_rect_start = painter.fontMetrics().boundingRect(start_str)
@@ -187,112 +170,5 @@ class RangeSlider(QSlider):
         # Draw end label
         pos_end_x = int(x_end) - text_rect_end.width() // 2
         pos_end_y = groove_rect.top() - 5
-        # Prevent overlap if handles are close
-        if abs(x_end - x_start) < (text_rect_start.width() + text_rect_end.width()) / 2 + 5:
-             # If close, maybe shift one up or down? Or just let them overlap for now/simple logic
-             # Let's shift end label down if they overlap? No, slider is small.
-             # Let's just draw it.
-             pass
         
         painter.drawText(pos_end_x, pos_end_y, end_str)
-
-class DragDropOverlay(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAcceptDrops(True)
-        # Transparent background
-        self.setStyleSheet("background-color: transparent;")
-
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
-
-    def dropEvent(self, event: QDropEvent):
-        files = [u.toLocalFile() for u in event.mimeData().urls()]
-        if files:
-            # Find the VideoPlayerWidget parent and emit its signal
-            parent = self.parent()
-            while parent:
-                if isinstance(parent, VideoPlayerWidget):
-                    parent.file_dropped.emit(files[0])
-                    break
-                parent = parent.parent()
-
-    def mouseDoubleClickEvent(self, event):
-        parent = self.parent()
-        while parent:
-            if isinstance(parent, VideoPlayerWidget):
-                parent.double_clicked.emit()
-                break
-            parent = parent.parent()
-
-class VideoPlayerWidget(QWidget):
-    """
-    A widget that contains the video output and basic controls.
-    """
-    file_dropped = pyqtSignal(str)
-    double_clicked = pyqtSignal()
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        
-        self.setAcceptDrops(True)
-        
-        self.media_player = QMediaPlayer()
-        self.audio_output = QAudioOutput()
-        self.media_player.setAudioOutput(self.audio_output)
-        
-        self.video_widget = QVideoWidget()
-        self.media_player.setVideoOutput(self.video_widget)
-        
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.video_widget)
-        self.setLayout(layout)
-        
-        # Set black background for video area
-        self.video_widget.setStyleSheet("background-color: black;")
-
-        # Overlay for drag and drop
-        self.overlay = DragDropOverlay(self)
-        self.overlay.raise_()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.overlay.resize(self.size())
-
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
-
-    def dropEvent(self, event: QDropEvent):
-        files = [u.toLocalFile() for u in event.mimeData().urls()]
-        if files:
-            self.file_dropped.emit(files[0])
-
-    def load_video(self, file_path):
-        self.media_player.setSource(QUrl.fromLocalFile(file_path))
-        # self.media_player.play() # Auto play or wait? Let's wait.
-        # self.media_player.pause()
-
-    def play(self):
-        self.media_player.play()
-
-    def pause(self):
-        self.media_player.pause()
-
-    def stop(self):
-        self.media_player.stop()
-        
-    def set_position(self, position):
-        self.media_player.setPosition(position)
-        
-    def get_duration(self):
-        return self.media_player.duration()
-        
-    def get_position(self):
-        return self.media_player.position()
