@@ -1,7 +1,46 @@
-from PyQt6.QtWidgets import (QWidget, QSlider, QStyle, QStyleOptionSlider, QToolTip)
+from PyQt6.QtWidgets import (QWidget, QSlider, QStyle, QStyleOptionSlider, QToolTip, 
+                             QDialog, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QBrush, QPen
 from core.utils import format_timestamp
+
+class ProgressDialog(QDialog):
+    def __init__(self, title, message, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setWindowModality(Qt.WindowModality.WindowModal)
+        self.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(self)
+        
+        self.label = QLabel(message)
+        layout.addWidget(self.label)
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 0) # Indeterminate
+        layout.addWidget(self.progress_bar)
+        
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(self.cancel_button)
+        layout.addLayout(button_layout)
+        
+        self.center_on_parent()
+
+    def center_on_parent(self):
+        if self.parent():
+            parent_geo = self.parent().geometry()
+            # Need to ensure geometry is up to date, but for now use current hint
+            # resize first to ensure width is respected
+            self.resize(self.minimumWidth(), self.minimumHeight())
+            geo = self.geometry()
+            x = parent_geo.x() + (parent_geo.width() - geo.width()) // 2
+            y = parent_geo.y() + (parent_geo.height() - geo.height()) // 2
+            self.move(x, y)
+
 
 class RangeSlider(QSlider):
     rangeChanged = pyqtSignal(int, int) # start, end

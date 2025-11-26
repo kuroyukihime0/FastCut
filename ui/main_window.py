@@ -11,7 +11,7 @@ from PyQt6.QtMultimedia import QMediaPlayer
 from core.utils import resource_path, get_executable_path, format_timestamp
 from core.video_processor import KeyframeThread, ExportThread
 from ui.video_player import VideoPlayerWidget
-from ui.widgets import RangeSlider
+from ui.widgets import RangeSlider, ProgressDialog
 
 class FastCutApp(QMainWindow):
     def __init__(self):
@@ -440,10 +440,12 @@ class FastCutApp(QMainWindow):
         status = "enabled" if self.use_keyframe_cut else "disabled"
         self.statusBar().showMessage(f"Smart Cut (Keyframe Aligned): {status}")
 
+    def create_progress_dialog(self, label):
+        dialog = ProgressDialog("Processing", label, self)
+        return dialog
+
     def start_keyframe_analysis(self, file_path, start_time, end_time):
-        self.progress_dialog = QProgressDialog("Analyzing keyframes...", "Cancel", 0, 0, self)
-        self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        self.progress_dialog.setMinimumDuration(0)
+        self.progress_dialog = self.create_progress_dialog("Analyzing keyframes...")
         self.progress_dialog.show()
 
         self.keyframe_thread = KeyframeThread(file_path, start_time, end_time)
@@ -556,9 +558,7 @@ class FastCutApp(QMainWindow):
                 output_file
             ]
 
-        self.progress_dialog = QProgressDialog("Exporting clip, please wait...", "Cancel", 0, 0, self)
-        self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        self.progress_dialog.setMinimumDuration(0)
+        self.progress_dialog = self.create_progress_dialog("Exporting clip, please wait...")
         self.progress_dialog.show()
 
         self.export_thread = ExportThread(cmd)

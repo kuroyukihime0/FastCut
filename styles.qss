@@ -44,7 +44,7 @@ QPushButton#exportBtn:hover {
 QPushButton#speedBtn {
     min-width: 25px;
     max-width: 25px;
-    padding: 2px;
+    padding: 6px 2px;
     font-weight: bold;
 }
 
@@ -101,4 +101,10 @@ QComboBox::drop-down {
     border-left-width: 1px;
     border-left-color: #555;
     border-left-style: solid;
+}
+
+QComboBox::down-arrow {
+    image: url(assets/arrow_down.png);
+    width: 12px;
+    height: 12px;
 }
